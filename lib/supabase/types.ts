@@ -12,7 +12,7 @@ export type Database = {
       tenants: {
         Row: {
           id: string
-          user_id: string
+          user_id: string | null
           wa_number: string | null
           whapi_token: string | null
           plan: string
@@ -20,7 +20,7 @@ export type Database = {
         }
         Insert: {
           id?: string
-          user_id: string
+          user_id?: string | null
           wa_number?: string | null
           whapi_token?: string | null
           plan?: string
@@ -28,7 +28,7 @@ export type Database = {
         }
         Update: {
           id?: string
-          user_id?: string
+          user_id?: string | null
           wa_number?: string | null
           whapi_token?: string | null
           plan?: string
@@ -42,6 +42,12 @@ export type Database = {
           tenant_id: string
           wa_number: string
           display_name: string | null
+          conversation_summary: string | null
+          conversation_status: string
+          last_message_at: string | null
+          needs_action: boolean
+          urgency: string
+          message_count: number
           created_at: string
         }
         Insert: {
@@ -49,6 +55,12 @@ export type Database = {
           tenant_id: string
           wa_number: string
           display_name?: string | null
+          conversation_summary?: string | null
+          conversation_status?: string
+          last_message_at?: string | null
+          needs_action?: boolean
+          urgency?: string
+          message_count?: number
           created_at?: string
         }
         Update: {
@@ -56,6 +68,12 @@ export type Database = {
           tenant_id?: string
           wa_number?: string
           display_name?: string | null
+          conversation_summary?: string | null
+          conversation_status?: string
+          last_message_at?: string | null
+          needs_action?: boolean
+          urgency?: string
+          message_count?: number
           created_at?: string
         }
         Relationships: []
@@ -130,6 +148,39 @@ export type Database = {
           summary?: string | null
           entities?: Json
           reply_draft?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      follow_ups: {
+        Row: {
+          id: string
+          tenant_id: string
+          client_id: string
+          message: string
+          due_date: string
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          client_id: string
+          message: string
+          due_date: string
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          client_id?: string
+          message?: string
+          due_date?: string
+          status?: string
           created_at?: string
           updated_at?: string
         }

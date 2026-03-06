@@ -1,94 +1,61 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { TaskCard } from '@/components/task-card'
+import { ConversationCard } from '@/components/conversation-card'
 import { TaskFilters } from '@/components/task-filters'
 
-type TaskType = 'invoice' | 'vat_query' | 'doc_request' | 'payment' | 'general' | 'ignore'
-type TaskUrgency = 'low' | 'normal' | 'high' | 'urgent'
-type TaskStatus = 'pending' | 'in_progress' | 'done' | 'snoozed'
+type ConversationStatus = 'pending' | 'in_progress' | 'done' | 'follow_up'
+type ConversationUrgency = 'low' | 'normal' | 'high' | 'urgent'
 type FilterStatus = 'all' | 'pending' | 'in_progress' | 'done'
 
-interface Task {
+interface Conversation {
   id: string
-  client_name: string
   wa_number: string
-  type: TaskType
-  urgency: TaskUrgency
-  status: TaskStatus
-  summary: string
-  created_at: string
-  entities: Record<string, any>
+  display_name: string | null
+  conversation_summary: string | null
+  conversation_status: ConversationStatus
+  last_message_at: string | null
+  needs_action: boolean
+  urgency: ConversationUrgency
+  message_count: number
 }
 
 export default function DashboardPage() {
   const [filter, setFilter] = useState<FilterStatus>('all')
-  const [tasks, setTasks] = useState<Task[]>([])
+  const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadTasks()
+    loadConversations()
   }, [])
 
-  async function loadTasks() {
+  async function loadConversations() {
     try {
-      const supabase = createClient()
-
-      // Fetch tasks with client info
-      const { data, error } = await supabase
-        .from('tasks')
-        .select(`
-          id,
-          type,
-          status,
-          urgency,
-          summary,
-          entities,
-          created_at,
-          clients (
-            wa_number,
-            display_name
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .limit(50)
-
-      if (error) {
-        console.error('Error loading tasks:', error)
-        setError(error.message)
-        return
+      const response = await fetch('/api/conversations')
+      if (!response.ok) {
+        throw new Error('Failed to fetch conversations')
       }
 
-      // Transform data to match Task interface
-      const transformedTasks: Task[] = (data || []).map((task: any) => ({
-        id: task.id,
-        client_name: task.clients?.display_name || task.clients?.wa_number || 'Unknown',
-        wa_number: task.clients?.wa_number || '',
-        type: task.type,
-        urgency: task.urgency,
-        status: task.status,
-        summary: task.summary || 'No summary',
-        created_at: task.created_at,
-        entities: task.entities || {},
-      }))
-
-      setTasks(transformedTasks)
+      const data = await response.json()
+      setConversations(data.conversations || [])
     } catch (err) {
       console.error('Unexpected error:', err)
-      setError('Failed to load tasks')
+      setError('Failed to load conversations')
     } finally {
       setLoading(false)
     }
   }
 
-  const filteredTasks = tasks.filter((task) => {
+  const filteredConversations = conversations.filter((conv) => {
     if (filter === 'all') return true
-    return task.status === filter
+    if (filter === 'pending') return conv.conversation_status === 'pending'
+    if (filter === 'in_progress') return conv.conversation_status === 'in_progress'
+    if (filter === 'done') return conv.conversation_status === 'done'
+    return true
   })
 
-  const unreadCount = tasks.filter(t => t.status === 'pending').length
+  const actionNeededCount = conversations.filter(c => c.needs_action).length
 
   return (
     <div className="min-h-screen bg-[var(--background)]">
@@ -100,9 +67,9 @@ export default function DashboardPage() {
               <div className="w-8 h-8 rounded-lg bg-[var(--emerald)] flex items-center justify-center">
                 <span className="font-mono font-bold text-sm text-black">L</span>
               </div>
-              {unreadCount > 0 && (
+              {actionNeededCount > 0 && (
                 <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[var(--urgent)] border-2 border-[var(--background)] flex items-center justify-center">
-                  <span className="text-[10px] font-bold text-white">{unreadCount}</span>
+                  <span className="text-[10px] font-bold text-white">{actionNeededCount}</span>
                 </div>
               )}
             </div>
@@ -120,12 +87,12 @@ export default function DashboardPage() {
       {/* Filters */}
       <TaskFilters activeFilter={filter} onFilterChange={setFilter} />
 
-      {/* Task List */}
+      {/* Conversation List */}
       <main className="mx-auto max-w-lg px-4 pb-24">
         {loading ? (
           <div className="text-center py-16">
             <div className="w-12 h-12 mx-auto rounded-full border-2 border-[var(--emerald)] border-t-transparent animate-spin mb-4" />
-            <p className="text-[var(--foreground-muted)]">Loading tasks...</p>
+            <p className="text-[var(--foreground-muted)]">Loading conversations...</p>
           </div>
         ) : error ? (
           <div className="text-center py-16">
@@ -134,10 +101,10 @@ export default function DashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <p className="text-[var(--urgent)] font-medium mb-2">Failed to load tasks</p>
+            <p className="text-[var(--urgent)] font-medium mb-2">Failed to load conversations</p>
             <p className="text-[var(--foreground-muted)] text-sm">{error}</p>
             <button
-              onClick={loadTasks}
+              onClick={loadConversations}
               className="mt-4 px-4 py-2 rounded-lg bg-[var(--emerald)] text-black font-medium hover:opacity-90"
             >
               Retry
@@ -146,20 +113,28 @@ export default function DashboardPage() {
         ) : (
           <>
             <div className="flex flex-col gap-3 mt-4">
-              {filteredTasks.map((task, index) => (
-                <TaskCard key={task.id} task={task} index={index} />
+              {filteredConversations.map((conversation, index) => (
+                <ConversationCard
+                  key={conversation.id}
+                  conversation={conversation}
+                  index={index}
+                  onClick={() => {
+                    // TODO: Navigate to conversation view
+                    console.log('Open conversation:', conversation.id)
+                  }}
+                />
               ))}
             </div>
 
-            {filteredTasks.length === 0 && (
+            {filteredConversations.length === 0 && (
               <div className="text-center py-16">
                 <div className="w-16 h-16 mx-auto rounded-2xl bg-[var(--surface)] flex items-center justify-center mb-4">
                   <svg className="w-8 h-8 text-[var(--foreground-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
                   </svg>
                 </div>
                 <p className="text-[var(--foreground-muted)]">
-                  {tasks.length === 0 ? 'No tasks yet. Send a WhatsApp message to get started!' : `No ${filter} tasks`}
+                  {conversations.length === 0 ? 'No conversations yet. Send a WhatsApp message to get started!' : `No ${filter} conversations`}
                 </p>
               </div>
             )}

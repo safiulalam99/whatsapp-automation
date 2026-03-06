@@ -271,3 +271,177 @@ export async function extractTasksBatch(messages: string[]): Promise<ExtractedTa
     }
   })
 }
+
+/**
+ * Conversation summary structure
+ */
+export interface ConversationSummary {
+  summary: string
+  needs_action: boolean
+  urgency: 'low' | 'normal' | 'high' | 'urgent'
+  conversation_status: 'pending' | 'in_progress' | 'done' | 'follow_up'
+  follow_up_needed: boolean
+  follow_up_message?: string
+  follow_up_date?: string
+}
+
+/**
+ * System prompt for conversation summary generation
+ */
+const CONVERSATION_SUMMARY_PROMPT = `You are an AI assistant for Ledgr analyzing WhatsApp conversation history.
+
+Your job is to analyze ALL messages from a client and create ONE comprehensive summary that tells the accountant what this person wants.
+
+CRITICAL: You must ONLY respond with valid JSON. No markdown, no explanations, just raw JSON.
+
+ANALYSIS GUIDELINES:
+- Read through ALL messages chronologically
+- Identify the main request or topic
+- Note if conversation is casual vs business
+- Detect urgency indicators (URGENT, ASAP, deadline mentions)
+- Check if action is needed from the accountant
+- Look for follow-up scenarios (e.g., "will get back to you", "let me check", "tomorrow")
+
+CONVERSATION STATUS:
+- pending: New conversation, no response yet
+- in_progress: Accountant has replied but conversation ongoing
+- done: Request completed or conversation closed
+- follow_up: Accountant needs to follow up later
+
+FOLLOW-UP DETECTION:
+If accountant said phrases like:
+- "will get back to you"
+- "let me check"
+- "tomorrow"
+- "by [date]"
+- "after I review"
+Then set follow_up_needed: true and extract the follow-up message and date.
+
+OUTPUT FORMAT (JSON only, no markdown):
+{
+  "summary": "One clear sentence describing what the client wants or the conversation topic",
+  "needs_action": boolean,
+  "urgency": "low" | "normal" | "high" | "urgent",
+  "conversation_status": "pending" | "in_progress" | "done" | "follow_up",
+  "follow_up_needed": boolean,
+  "follow_up_message": "What needs to be followed up (if applicable)",
+  "follow_up_date": "ISO date string (if applicable)"
+}
+
+Example - Invoice request:
+{"summary":"Client requesting invoice for December services","needs_action":true,"urgency":"normal","conversation_status":"pending","follow_up_needed":false}
+
+Example - Accountant promised to follow up:
+{"summary":"Client asked about VAT return, accountant said will check tomorrow","needs_action":false,"urgency":"normal","conversation_status":"follow_up","follow_up_needed":true,"follow_up_message":"Check and respond about VAT return status","follow_up_date":"2024-01-15T10:00:00Z"}
+
+Example - Casual conversation:
+{"summary":"Client greeted and asked how things are going","needs_action":false,"urgency":"low","conversation_status":"done","follow_up_needed":false}`
+
+/**
+ * Generate conversation summary from message history
+ *
+ * @param messages - Array of message objects with body, direction, and timestamp
+ * @returns ConversationSummary object with analysis results
+ */
+export async function generateConversationSummary(
+  messages: Array<{ body: string; direction: 'in' | 'out'; created_at: string }>
+): Promise<ConversationSummary> {
+  const apiKey = getApiKey()
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY is not configured')
+  }
+
+  if (messages.length === 0) {
+    return {
+      summary: 'No messages yet',
+      needs_action: false,
+      urgency: 'low',
+      conversation_status: 'pending',
+      follow_up_needed: false,
+    }
+  }
+
+  // Format messages as conversation
+  const conversationText = messages
+    .map((msg) => {
+      const sender = msg.direction === 'in' ? 'Client' : 'Accountant'
+      const time = new Date(msg.created_at).toLocaleString()
+      return `[${time}] ${sender}: ${msg.body}`
+    })
+    .join('\n')
+
+  try {
+    const response = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://ledgr.app',
+        'X-Title': 'Ledgr WhatsApp Bot',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: CONVERSATION_SUMMARY_PROMPT,
+          },
+          {
+            role: 'user',
+            content: `Analyze this WhatsApp conversation:\n\n${conversationText}`,
+          },
+        ],
+        temperature: 0.3,
+        max_tokens: 1000,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('OpenRouter API error:', response.status, errorText)
+      throw new Error(`OpenRouter API error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    const content = data.choices?.[0]?.message?.content
+
+    if (!content) {
+      throw new Error('No content in OpenRouter response')
+    }
+
+    // Parse JSON response (handle markdown code blocks)
+    let jsonText = content.trim()
+    if (jsonText.startsWith('```json')) {
+      jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '')
+    } else if (jsonText.startsWith('```')) {
+      jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '')
+    }
+
+    const summary: ConversationSummary = JSON.parse(jsonText)
+
+    // Validate response
+    const validStatuses = ['pending', 'in_progress', 'done', 'follow_up']
+    if (!validStatuses.includes(summary.conversation_status)) {
+      summary.conversation_status = 'pending'
+    }
+
+    const validUrgencies = ['low', 'normal', 'high', 'urgent']
+    if (!validUrgencies.includes(summary.urgency)) {
+      summary.urgency = 'normal'
+    }
+
+    return summary
+
+  } catch (error) {
+    console.error('Failed to generate conversation summary:', error)
+
+    // Fallback summary
+    return {
+      summary: 'Conversation requires review',
+      needs_action: true,
+      urgency: 'normal',
+      conversation_status: 'pending',
+      follow_up_needed: false,
+    }
+  }
+}
