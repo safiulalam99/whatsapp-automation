@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
       // Run AI extraction
       console.log('🤖 Running AI extraction...')
-      const extracted = await extractTask(messageBody, clientName)
+      const extracted = await extractTask(messageBody)
       console.log('✨ AI Result:', JSON.stringify(extracted, null, 2))
 
       // Skip if AI says don't create task
