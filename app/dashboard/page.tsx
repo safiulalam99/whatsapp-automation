@@ -1,67 +1,94 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { TaskCard } from '@/components/task-card'
 import { TaskFilters } from '@/components/task-filters'
 
-// Mock data for now - will replace with real Supabase data
-const mockTasks = [
-  {
-    id: '1',
-    client_name: 'Ahmed Al-Mansoori',
-    wa_number: '971501234567',
-    type: 'invoice' as const,
-    urgency: 'high' as const,
-    status: 'pending' as const,
-    summary: 'Requesting invoice for December 2024 consulting services',
-    created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(), // 5 mins ago
-    entities: { amount: 12500, currency: 'AED' },
-  },
-  {
-    id: '2',
-    client_name: 'Sara Marketing LLC',
-    wa_number: '971509876543',
-    type: 'vat_query' as const,
-    urgency: 'urgent' as const,
-    status: 'pending' as const,
-    summary: 'Urgent: VAT return deadline tomorrow, need Q4 summary',
-    created_at: new Date(Date.now() - 1000 * 60 * 12).toISOString(), // 12 mins ago
-    entities: {},
-  },
-  {
-    id: '3',
-    client_name: 'محمد التميمي',
-    wa_number: '971505551234',
-    type: 'doc_request' as const,
-    urgency: 'normal' as const,
-    status: 'in_progress' as const,
-    summary: 'Requesting trade license renewal documents',
-    created_at: new Date(Date.now() - 1000 * 60 * 45).toISOString(), // 45 mins ago
-    entities: { document_type: 'Trade License' },
-  },
-  {
-    id: '4',
-    client_name: 'Khalid Real Estate',
-    wa_number: '971504445678',
-    type: 'payment' as const,
-    urgency: 'low' as const,
-    status: 'done' as const,
-    summary: 'Payment confirmation for monthly bookkeeping services',
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
-    entities: { amount: 3000, currency: 'AED' },
-  },
-]
-
+type TaskType = 'invoice' | 'vat_query' | 'doc_request' | 'payment' | 'general' | 'ignore'
+type TaskUrgency = 'low' | 'normal' | 'high' | 'urgent'
+type TaskStatus = 'pending' | 'in_progress' | 'done' | 'snoozed'
 type FilterStatus = 'all' | 'pending' | 'in_progress' | 'done'
+
+interface Task {
+  id: string
+  client_name: string
+  wa_number: string
+  type: TaskType
+  urgency: TaskUrgency
+  status: TaskStatus
+  summary: string
+  created_at: string
+  entities: Record<string, any>
+}
 
 export default function DashboardPage() {
   const [filter, setFilter] = useState<FilterStatus>('all')
-  const [unreadCount] = useState(3)
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const filteredTasks = mockTasks.filter((task) => {
+  useEffect(() => {
+    loadTasks()
+  }, [])
+
+  async function loadTasks() {
+    try {
+      const supabase = createClient()
+
+      // Fetch tasks with client info
+      const { data, error } = await supabase
+        .from('tasks')
+        .select(`
+          id,
+          type,
+          status,
+          urgency,
+          summary,
+          entities,
+          created_at,
+          clients (
+            wa_number,
+            display_name
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (error) {
+        console.error('Error loading tasks:', error)
+        setError(error.message)
+        return
+      }
+
+      // Transform data to match Task interface
+      const transformedTasks: Task[] = (data || []).map((task: any) => ({
+        id: task.id,
+        client_name: task.clients?.display_name || task.clients?.wa_number || 'Unknown',
+        wa_number: task.clients?.wa_number || '',
+        type: task.type,
+        urgency: task.urgency,
+        status: task.status,
+        summary: task.summary || 'No summary',
+        created_at: task.created_at,
+        entities: task.entities || {},
+      }))
+
+      setTasks(transformedTasks)
+    } catch (err) {
+      console.error('Unexpected error:', err)
+      setError('Failed to load tasks')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filteredTasks = tasks.filter((task) => {
     if (filter === 'all') return true
     return task.status === filter
   })
+
+  const unreadCount = tasks.filter(t => t.status === 'pending').length
 
   return (
     <div className="min-h-screen bg-[var(--background)]">
@@ -95,21 +122,48 @@ export default function DashboardPage() {
 
       {/* Task List */}
       <main className="mx-auto max-w-lg px-4 pb-24">
-        <div className="flex flex-col gap-3 mt-4">
-          {filteredTasks.map((task, index) => (
-            <TaskCard key={task.id} task={task} index={index} />
-          ))}
-        </div>
-
-        {filteredTasks.length === 0 && (
+        {loading ? (
           <div className="text-center py-16">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-[var(--surface)] flex items-center justify-center mb-4">
-              <svg className="w-8 h-8 text-[var(--foreground-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
+            <div className="w-12 h-12 mx-auto rounded-full border-2 border-[var(--emerald)] border-t-transparent animate-spin mb-4" />
+            <p className="text-[var(--foreground-muted)]">Loading tasks...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-16">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-[var(--urgent)]/10 flex items-center justify-center mb-4">
+              <svg className="w-8 h-8 text-[var(--urgent)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <p className="text-[var(--foreground-muted)]">No {filter !== 'all' ? filter : ''} tasks</p>
+            <p className="text-[var(--urgent)] font-medium mb-2">Failed to load tasks</p>
+            <p className="text-[var(--foreground-muted)] text-sm">{error}</p>
+            <button
+              onClick={loadTasks}
+              className="mt-4 px-4 py-2 rounded-lg bg-[var(--emerald)] text-black font-medium hover:opacity-90"
+            >
+              Retry
+            </button>
           </div>
+        ) : (
+          <>
+            <div className="flex flex-col gap-3 mt-4">
+              {filteredTasks.map((task, index) => (
+                <TaskCard key={task.id} task={task} index={index} />
+              ))}
+            </div>
+
+            {filteredTasks.length === 0 && (
+              <div className="text-center py-16">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-[var(--surface)] flex items-center justify-center mb-4">
+                  <svg className="w-8 h-8 text-[var(--foreground-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <p className="text-[var(--foreground-muted)]">
+                  {tasks.length === 0 ? 'No tasks yet. Send a WhatsApp message to get started!' : `No ${filter} tasks`}
+                </p>
+              </div>
+            )}
+          </>
         )}
       </main>
     </div>
