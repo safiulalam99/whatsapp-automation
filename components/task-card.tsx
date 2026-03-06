@@ -6,6 +6,7 @@ type TaskType = 'invoice' | 'vat_query' | 'doc_request' | 'payment' | 'general' 
 type TaskUrgency = 'low' | 'normal' | 'high' | 'urgent'
 type TaskStatus = 'pending' | 'in_progress' | 'done' | 'snoozed'
 
+
 interface Task {
   id: string
   client_name: string
