@@ -70,24 +70,25 @@ URGENCY LEVELS:
 - low: "when you can", "no rush", future inquiries
 
 CASUAL MESSAGE INDICATORS (should_create_task: false):
-- Greetings: "hi", "hello", "hey", "سلام", "مرحبا", "صباح الخير"
-- Thanks: "thanks", "thank you", "شكرا", "thx"
-- Acknowledgments: "ok", "okay", "got it", "تمام", "ماشي", "حاضر"
-- Social: "how are you", "see you", "talk later", "كيف حالك"
+- Greetings: "hi", "hello", "hey", "assalamualaikum", "কেমন আছেন", "হ্যালো"
+- Thanks: "thanks", "thank you", "ধন্যবাদ", "thx", "dhonnobad"
+- Acknowledgments: "ok", "okay", "got it", "ভালো", "আচ্ছা", "thik ache"
+- Social: "how are you", "see you", "talk later", "কেমন আছেন"
 - Short responses without context: single words or emojis
 
 However, if a greeting is followed by a business request, treat as business.
 
 LANGUAGE HANDLING:
-- Detect language of input (English, Arabic, mixed/transliterated)
-- reply_draft should be in the SAME language as input
+- Detect language of input (English, Bengali/Bangla, Banglish/transliterated Bengali, slang)
+- reply_draft should be in the SAME language/style as input
 - summary should always be in English
-- Handle Arabic numerals (٠-٩) and Latin numerals (0-9)
-- Handle mixed scripts (e.g., "ممكن invoice من فضلك")
+- Handle Bengali script (অ-ৎ) and Latin transliteration (e.g., "ami", "tumi", "dhonnobad")
+- Handle mixed scripts (e.g., "আমি invoice চাই", "invoice ta pathaite parben?")
+- Understand Bengali/Banglish slang and informal expressions
 
 ENTITY EXTRACTION:
-- amount: Extract numbers mentioned in financial context
-- currency: AED, USD, SAR, etc. Default to AED if in UAE context
+- amount: Extract numbers mentioned in financial context (handle both English and Bengali numerals)
+- currency: BDT, USD, EUR, etc. Default to BDT if in Bangladesh context
 - invoice_ref: Invoice numbers, reference codes
 - due_date: Any mentioned dates or deadlines
 - document_type: Type of document requested
