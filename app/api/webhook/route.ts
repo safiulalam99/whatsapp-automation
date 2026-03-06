@@ -67,6 +67,28 @@ export async function POST(request: NextRequest) {
       // For now, we'll use a hardcoded tenant_id for testing
       // In production, you'd look this up based on the Whapi channel
       const DEMO_TENANT_ID = '00000000-0000-0000-0000-000000000000'
+      const DEMO_USER_ID = '00000000-0000-0000-0000-000000000000'
+
+      // 0. Ensure demo tenant exists
+      const { error: tenantError } = await supabase
+        .from('tenants')
+        .upsert(
+          {
+            id: DEMO_TENANT_ID,
+            user_id: DEMO_USER_ID,
+            wa_number: 'demo',
+            plan: 'starter',
+          },
+          {
+            onConflict: 'id',
+            ignoreDuplicates: true,
+          }
+        )
+
+      if (tenantError) {
+        console.error('❌ Error creating tenant:', tenantError)
+        continue
+      }
 
       // 1. Upsert client
       const { data: client, error: clientError } = await supabase
