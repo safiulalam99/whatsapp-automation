@@ -25,6 +25,7 @@ interface TaskCardProps {
 }
 
 
+
 const typeConfig: Record<TaskType, { label: string; color: string; icon: string }> = {
   invoice: { label: 'Invoice', color: 'var(--invoice)', icon: '📄' },
   vat_query: { label: 'VAT', color: 'var(--vat)', icon: '📊' },
