@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+
 type ConversationStatus = 'pending' | 'in_progress' | 'done' | 'follow_up'
 type ConversationUrgency = 'low' | 'normal' | 'high' | 'urgent'
 
@@ -19,6 +21,7 @@ interface ConversationCardProps {
   conversation: Conversation
   index: number
   onClick: () => void
+  isSelected?: boolean
 }
 
 const statusConfig: Record<ConversationStatus, { label: string; color: string; icon: string }> = {
@@ -42,7 +45,8 @@ function formatTimeAgo(dateString: string | null): string {
   return date.toLocaleDateString()
 }
 
-export function ConversationCard({ conversation, index, onClick }: ConversationCardProps) {
+export function ConversationCard({ conversation, index, onClick, isSelected = false }: ConversationCardProps) {
+  const [isHovered, setIsHovered] = useState(false)
   const statusInfo = statusConfig[conversation.conversation_status]
   const displayName = conversation.display_name || conversation.wa_number
 
@@ -55,15 +59,27 @@ export function ConversationCard({ conversation, index, onClick }: ConversationC
     >
       <button
         onClick={onClick}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
         className={`
           w-full text-left
           relative overflow-hidden
-          bg-[var(--surface)] hover:bg-[var(--surface-elevated)]
-          rounded-2xl border border-white/5
-          transition-all duration-200
-          hover:shadow-xl
-          ${conversation.conversation_status === 'done' ? 'opacity-60' : ''}
+          rounded-2xl border transition-all duration-200
           p-4
+
+          /* Mobile: Dark theme */
+          bg-[var(--surface)] border-white/5
+          hover:bg-[var(--surface-elevated)]
+
+          /* Desktop: Light theme */
+          lg:bg-white lg:border-gray-200
+          lg:hover:bg-gray-50
+
+          /* Selected state (desktop) */
+          ${isSelected ? 'lg:bg-emerald-50 lg:border-emerald-200' : ''}
+
+          /* Done state */
+          ${conversation.conversation_status === 'done' ? 'opacity-60' : ''}
         `}
       >
         {/* Urgency Glow */}
@@ -117,13 +133,46 @@ export function ConversationCard({ conversation, index, onClick }: ConversationC
 
         {/* Meta Info */}
         <div className="flex items-center justify-between text-xs">
-          <span className="text-[var(--foreground-muted)] font-mono">
+          <span className="text-[var(--foreground-muted)] font-mono lg:text-gray-500">
             {formatTimeAgo(conversation.last_message_at)}
           </span>
-          <span className="text-[var(--foreground-muted)]">
+          <span className="text-[var(--foreground-muted)] lg:text-gray-500">
             {conversation.message_count} {conversation.message_count === 1 ? 'message' : 'messages'}
           </span>
         </div>
+
+        {/* Desktop Hover Actions */}
+        {isHovered && (
+          <div className="hidden lg:flex gap-2 mt-3 pt-3 border-t border-gray-200">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                // TODO: Quick reply
+              }}
+              className="flex-1 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              📤 Send
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                // TODO: Mark done
+              }}
+              className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+            >
+              ✓ Done
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                // TODO: Snooze
+              }}
+              className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+            >
+              💤
+            </button>
+          </div>
+        )}
       </button>
 
       <style jsx>{`
