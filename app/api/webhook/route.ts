@@ -42,7 +42,13 @@ export async function POST(request: NextRequest) {
 
       // Skip non-text messages for now (can handle later)
       if (message.type !== 'text' || !message.text?.body) {
-        console.log(`⏭️ Skipping ${message.type} message`)
+        console.log(`⏭️ Skipping ${message.type} message (no text body)`)
+        continue
+      }
+
+      // Skip empty or placeholder messages
+      if (message.text.body.trim() === '' || message.text.body === '...') {
+        console.log('⏭️ Skipping empty/placeholder message')
         continue
       }
 
@@ -67,27 +73,32 @@ export async function POST(request: NextRequest) {
       // For now, we'll use a hardcoded tenant_id for testing
       // In production, you'd look this up based on the Whapi channel
       const DEMO_TENANT_ID = '00000000-0000-0000-0000-000000000000'
-      const DEMO_USER_ID = '00000000-0000-0000-0000-000000000000'
 
-      // 0. Ensure demo tenant exists
-      const { error: tenantError } = await supabase
+      // 0. Ensure demo tenant exists (bypass RLS with service role key)
+      // First check if tenant exists
+      const { data: existingTenant } = await supabase
         .from('tenants')
-        .upsert(
-          {
+        .select('id')
+        .eq('id', DEMO_TENANT_ID)
+        .single()
+
+      if (!existingTenant) {
+        console.log('🔧 Creating demo tenant...')
+        // Create tenant without user_id constraint (we'll use RLS bypass)
+        const { error: tenantError } = await supabase
+          .from('tenants')
+          .insert({
             id: DEMO_TENANT_ID,
-            user_id: DEMO_USER_ID,
+            user_id: null, // Allow null for demo tenant
             wa_number: 'demo',
             plan: 'starter',
-          },
-          {
-            onConflict: 'id',
-            ignoreDuplicates: true,
-          }
-        )
+          })
 
-      if (tenantError) {
-        console.error('❌ Error creating tenant:', tenantError)
-        continue
+        if (tenantError) {
+          console.error('❌ Error creating tenant:', tenantError)
+          continue
+        }
+        console.log('✅ Demo tenant created')
       }
 
       // 1. Upsert client
